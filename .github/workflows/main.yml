@@ -251,7 +251,7 @@ jobs:
                     docker pull $imageName
                     docker tag $imageName registry.cn-hangzhou.aliyuncs.com/dubux/$newImageName
                     url=registry.cn-hangzhou.aliyuncs.com/dubux/$newImageName
-                    urls=`echo -e ${urls} \n ${url}`
+                    urls=`echo -e "${urls} \n ${url}"`
                     docker push registry.cn-hangzhou.aliyuncs.com/dubux/$newImageName
                   fi
               done
@@ -269,6 +269,7 @@ jobs:
             ${{ env.issueauth }} 您好.
             您自定义的docker转存已完成. 请前往下面的 URL 查看详细信息.
             > ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            转存之后的docker仓库路径：
             ${{env.urls}}
             ----
           emoji: hooray
