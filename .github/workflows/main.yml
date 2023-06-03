@@ -18,10 +18,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: DS920+
-            version: 7.0.1-42218
-            machine: Custom
-            user: chenxudong2020
+          - res: registry.cn-hangzhou.aliyuncs.com/dubux
+
     steps:
       - name: 检出文件
         uses: actions/checkout@v3
@@ -251,6 +249,9 @@ jobs:
                     echo $newImageName
                     docker pull $imageName
                     docker tag $imageName registry.cn-hangzhou.aliyuncs.com/dubux/$newImageName
+                    url=registry.cn-hangzhou.aliyuncs.com/dubux/$newImageName
+                    oldUrl=${env.keys}
+                    echo "keys="${oldUrl} ${url}"" >> $GITHUB_ENV
                     docker push registry.cn-hangzhou.aliyuncs.com/dubux/$newImageName
                   fi
               done
@@ -267,6 +268,7 @@ jobs:
             ${{ env.issueauth }} 您好.
             您自定义的docker转存已完成. 请前往下面的 URL 查看详细信息.
             > ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            ${env.keys}
             ----
           emoji: hooray
       - name: 关闭问题
