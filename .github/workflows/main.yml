@@ -269,7 +269,7 @@ jobs:
             ${{ env.issueauth }} 您好.
             您自定义的docker转存已完成. 请前往下面的 URL 查看详细信息.
             > ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            ${env.urls}
+            ${{env.urls}}
             ----
           emoji: hooray
       - name: 关闭问题
