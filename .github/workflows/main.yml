@@ -244,10 +244,11 @@ jobs:
               do
                   echo "${item}"
                   if [[ ${item} != http* ]]; then
-                    //具体工作
-                    
+                   
                     imageName=${item}
                     newImageName=${imageName////.}
+                    echo $imageName
+                    echo $newImageName
                     docker pull $imageName
                     docker tag $imageName registry.cn-hangzhou.aliyuncs.com/dubux/$newImageName
                     docker push registry.cn-hangzhou.aliyuncs.com/dubux/$newImageName
