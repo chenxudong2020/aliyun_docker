@@ -235,6 +235,7 @@ jobs:
       - name: 准备干活
         if: env.issues == 'true' && env.iscustom == 'true'
         run: |
+            urls=''
            if [ -n "${{ env.dockers }}" ]; then
               dockers=$(echo ${{ env.dockers }} | awk '{gsub(/ /,"")}1')
               docker=(${dockers//,/ })
@@ -250,12 +251,12 @@ jobs:
                     docker pull $imageName
                     docker tag $imageName registry.cn-hangzhou.aliyuncs.com/dubux/$newImageName
                     url=registry.cn-hangzhou.aliyuncs.com/dubux/$newImageName
-                    oldUrl=${env.keys}
-                    echo "keys="${oldUrl} ${url}"" >> $GITHUB_ENV
+                    urls=`echo ${urls},${url}`
                     docker push registry.cn-hangzhou.aliyuncs.com/dubux/$newImageName
                   fi
               done
             fi
+             echo "urls="${urls}"" >> $GITHUB_ENV
       - name: 编译结束更新评论
         if: env.issues == 'true' && env.iscustom == 'true'
         uses: actions-cool/issues-helper@v3
@@ -268,7 +269,7 @@ jobs:
             ${{ env.issueauth }} 您好.
             您自定义的docker转存已完成. 请前往下面的 URL 查看详细信息.
             > ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            ${env.keys}
+            ${env.urls}
             ----
           emoji: hooray
       - name: 关闭问题
