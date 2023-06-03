@@ -1,1 +1,292 @@
+name: Build
 
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+    inputs:
+      body:
+        description: 'issuss body'
+        required: true
+        default: ''
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: DS920+
+            version: 7.0.1-42218
+            machine: Custom
+            user: chenxudong2020
+    steps:
+      - name: 检出文件
+        uses: actions/checkout@v3
+      - name: 创建提示用户评论
+        if: github.event_name == 'issues'
+        id: comment
+        uses: actions-cool/issues-helper@v3
+        with:
+          actions: 'create-comment'
+          token: ${{ secrets.mytoken }}
+          issue-number: ${{ github.event.issue.number }}
+          body: |
+            分析 title 和 body 内容 ..
+            > ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            ----
+          emoji: heart
+      - name: 设置ruby3
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.1.2
+
+      - name: 设置python3
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 初始化环境
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          sudo timedatectl set-timezone "Asia/Shanghai"
+          python -m pip install --upgrade pip setuptools
+      - name: 获取issue
+        if: github.event_name == 'issues'
+        id: get-issues
+        uses: actions/github-script@v6
+        with:
+          script: |
+            // '<???>': 替换一次; '/<???>/g': 替换全局; '/<???>/gi': 替换全局并忽略大小写;
+            // \u0008 \b Backspace
+            // \u0009 \t Tab
+            // \u000A \n 换行符
+            // \u000B \v 垂直制表符
+            // \u000C \f 换页
+            // \u000D \r 回车
+            // \u0022 \" 双引号 (")
+            // \u0027 \' 单引号 (')
+            // \u005C \\ 反斜杠 (\)
+            // \u00A0    不间断空格
+            // \u2028    行分隔符
+            // \u2029    段落分隔符
+            // \uFEFF    字节顺序标记
+            var fs = require('fs'); // 引入fs模块
+            var issuenumber = ${{ toJSON(github.event.issue.number) }};
+            var issueauth = ${{ toJSON(github.event.issue.user.login) }};
+            var issuetitle = ${{ toJSON(github.event.issue.title) }};
+            var issuebody = ${{ toJSON(github.event.issue.body) }};
+            if (issuetitle != null) {
+                          issuetitle = issuetitle.replace(/\u000A|\u000D/g, "");  // 换行符,回车
+                        }
+
+                        if (issuebody != null) {
+                          // Backspace,Tab,垂直制表符,换页,回车,不间断空格,行分隔符,段落分隔符,字节顺序标记
+                          issuebody = issuebody.replace(/\u000A|\u0008|\u0009|\u000B|\u000C|\u000D|\u00A0|\u2028|\u2029|\uFEFF/g, "");
+
+                          // 容错
+                          issuebody = issuebody.replace(/：/g, ": ");
+                          issuebody = issuebody.replace(/，/g, ", ");
+                          issuebody = issuebody.replace(/“|”/g, "\"");
+                          fs.writeFileSync(`body#${issuenumber}.txt`, issuebody, { 'flag': 'w' }, (err) => { if (err) throw err; });
+
+                          var regex = /\`\`\`([\s\S]*?)\`\`\`/g;
+                          let options = issuebody.match(regex);
+                          if (options != null && options.length > 0) {
+                            fs.writeFileSync('customshell.sh', options[options.length-1].replace(/\`/g, ""), { 'flag': 'w' }, (err) => { if (err) throw err; });
+                            for(option in options) {
+                              console.log(options[option]);
+                              issuebody = issuebody.replace(options[option], "");
+                            }
+                          }
+                          // 换行符
+                          issuebody = issuebody.replace(/\u000A/g, "");
+                        }
+                        core.setOutput("issuenumber", JSON.stringify(issuenumber));
+                        core.setOutput("issueauth", JSON.stringify(issueauth));
+                        core.setOutput("issuetitle", JSON.stringify(issuetitle));
+                        core.setOutput("issuebody", JSON.stringify(issuebody));
+      - name: 设置issue到上下文
+        if: github.event_name == 'issues' && success()
+        run: |
+          echo issuenumber: '${{ steps.get-issues.outputs.issuenumber }}'
+          echo issueauth:   '${{ steps.get-issues.outputs.issueauth }}'
+          echo issuetitle:  '${{ steps.get-issues.outputs.issuetitle }}'
+          echo issuebody:   '${{ steps.get-issues.outputs.issuebody }}'
+          echo "issuenumber="${{ steps.get-issues.outputs.issuenumber }}"" >> $GITHUB_ENV
+          echo "issueauth="${{ steps.get-issues.outputs.issueauth }}"" >> $GITHUB_ENV
+          echo "issuetitle="${{ steps.get-issues.outputs.issuetitle }}"" >> $GITHUB_ENV
+          echo "issuebody="${{ steps.get-issues.outputs.issuebody }}"" >> $GITHUB_ENV
+      - name: 解析编译参数
+        shell: python
+        run: |
+          import os, re, json, shutil, string, subprocess
+
+          def set_output(name, value):
+              subprocess.call(["echo '{}={}' >> $GITHUB_ENV".format(name, value)], shell=True)
+
+          if __name__ == '__main__':
+
+              dockers=''
+              iscustom='true'
+              issues='false'
+
+              try:
+                  body = {}
+                  bodyOriginal = {}
+                  if '${{ github.event_name }}' == 'issues':
+                      if '${{ env.issuetitle }}'.lower().startswith('custom'):
+                          issues = 'true'
+                          bodyOriginal = json.loads('${{ env.issuebody }}')
+                      else:
+                          iscustom = 'false'
+                  else:
+                      bodyOriginal = json.loads('${{ inputs.body }}')
+
+                  for k, v in bodyOriginal.items():
+                    body[k.lower()] = v
+
+                  if len(body) == 0:
+                      iscustom = 'false'
+                      errinfo = 'body 错误, body is null'
+                  else:
+                      # l = lambda x: x.strip() if isinstance(x, str) else str(x)
+                      if 'dockers' in body: dockers = json.dumps(body['dockers']).strip()
+                      set_output('issues', issues)
+                      set_output('iscustom', iscustom)
+                      set_output('dockers', dockers)
+                     
+
+
+              except Exception as e:
+                  iscustom = 'false'
+                  errinfo = 'body 错误, 不符合JSON规范 {}.'.format(e)
+                  set_output('errinfo', errinfo)
+      - name: 打印编译参数
+        run: |
+          echo issues:            '${{ env.issues }}'
+          echo iscustom:            '${{ env.iscustom }}'
+          echo dockers:            '${{ env.dockers }}'
+      - name: issue打标签
+        if: env.issues == 'true' && env.iscustom == 'true'
+        uses: actions-cool/issues-helper@v3
+        with:
+          actions: 'add-labels'
+          token: ${{ secrets.mytoken }}
+          issue-number: ${{ env.issuenumber }}
+          labels: 'custom'
+      - name: 编译开始更新评论
+        if: env.issues == 'true' && env.iscustom == 'true'
+        uses: actions-cool/issues-helper@v3
+        with:
+          actions: 'update-comment'
+          token: ${{ secrets.mytoken }}
+          comment-id: ${{ steps.comment.outputs.comment-id }}
+          update-mode: replace
+          body: |
+            ${{ env.issueauth }} 您好.
+            您自定义的docker开始转存. 请前往下面的 URL 查看详细信息.
+            > ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            ----
+          emoji: heart
+      - name: 问题格式错误更新评论
+        if: env.issues == 'true' && env.iscustom == 'false'
+        uses: actions-cool/issues-helper@v3
+        with:
+          actions: 'update-comment'
+          token: ${{ secrets.mytoken }}
+          comment-id: ${{ steps.comment.outputs.comment-id }}
+          update-mode: replace
+          body: |
+            ${{ env.issueauth }} 您好.
+            您自定义 docker 所填写的信息有误, 无法触发编译, 请参考模板和错误提示对body进行修改并请重新触发编译(Close & Reopen).
+            `Error Info:`
+            `${{ env.errinfo }}`
+            > ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            ----
+          emoji: confused
+      - name: 非定制编译更新评论
+        if: env.issues == 'false'
+        uses: actions-cool/issues-helper@v3
+        with:
+          actions: 'update-comment'
+          token: ${{ secrets.mytoken }}
+          comment-id: ${{ steps.comment.outputs.comment-id }}
+          update-mode: replace
+          body: |
+            ${{ env.issueauth }} 您好.
+            根据 title 和 body 内容的分析, 该 Issue 并非定制Dockers转存. 将在管理员看到后会进行回复.
+            > ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            ----
+          emoji: eyes
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+
+      - name: Set up Docker Build
+        uses: docker/setup-buildx-action@v1    
+      - name: Login to aliyuncs
+        uses: docker/login-action@v2
+        with:
+          registry: registry.cn-hangzhou.aliyuncs.com
+          username: ${{ secrets.HUB_NAME }}
+          password: ${{ secrets.HUB_PASS }}
+
+      - name: 准备干活
+        if: env.issues == 'true' && env.iscustom == 'true'
+        run: |
+           if [ -n "${{ env.dockers }}" ]; then
+              dockers=$(echo ${{ env.dockers }} | awk '{gsub(/ /,"")}1')
+              docker=(${dockers//,/ })
+              for item in ${docker[@]}
+              do
+                  echo "${item}"
+                  if [[ ${item} != http* ]]; then
+                    //具体工作
+                    
+                    imageName=${item}
+                    newImageName=${imageName////.}
+                    docker pull imageName
+                    docker tag $imageName registry.cn-hangzhou.aliyuncs.com/dubux/$newImageName
+                    docker push registry.cn-hangzhou.aliyuncs.com/dubux/$newImageName
+                  fi
+              done
+          fi
+      - name: 编译结束更新评论
+        if: env.issues == 'true' && env.iscustom == 'true'
+        uses: actions-cool/issues-helper@v3
+        with:
+          actions: 'update-comment'
+          token: ${{ secrets.mytoken }}
+          comment-id: ${{ steps.comment.outputs.comment-id }}
+          update-mode: replace
+          body: |
+            ${{ env.issueauth }} 您好.
+            您自定义的docker转存已完成. 请前往下面的 URL 查看详细信息.
+            > ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            ----
+          emoji: hooray
+      - name: 关闭问题
+        if: env.issues == 'true' && env.iscustom == 'true' && success()
+        uses: actions-cool/issues-helper@v3
+        with:
+          actions: 'close-issue'
+          token: ${{ secrets.mytoken }}
+          issue-number: ${{ env.issuenumber }}
+
+      - name: 编译失败更新评论
+        if: env.issues == 'true' && env.iscustom == 'true' && failure()
+        uses: actions-cool/issues-helper@v3
+        with:
+          actions: 'update-comment'
+          token: ${{ secrets.mytoken }}
+          comment-id: ${{ steps.comment.outputs.comment-id }}
+          update-mode: replace
+          body: |
+            ${{ env.issueauth }} 您好.
+            您自定义的docker转存失败. 请前往下面的 URL 查看详细信息对body进行修改并请重新触发编译(Close & Reopen).
+            > ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          emoji: confused
