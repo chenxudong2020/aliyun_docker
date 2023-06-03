@@ -248,7 +248,7 @@ jobs:
                     
                     imageName=${item}
                     newImageName=${imageName////.}
-                    docker pull imageName
+                    docker pull $imageName
                     docker tag $imageName registry.cn-hangzhou.aliyuncs.com/dubux/$newImageName
                     docker push registry.cn-hangzhou.aliyuncs.com/dubux/$newImageName
                   fi
