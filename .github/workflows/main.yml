@@ -235,7 +235,7 @@ jobs:
       - name: 准备干活
         if: env.issues == 'true' && env.iscustom == 'true'
         run: |
-            urls=''
+          urls=''
            if [ -n "${{ env.dockers }}" ]; then
               dockers=$(echo ${{ env.dockers }} | awk '{gsub(/ /,"")}1')
               docker=(${dockers//,/ })
