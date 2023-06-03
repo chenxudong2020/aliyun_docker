@@ -234,7 +234,6 @@ jobs:
           registry: registry.cn-hangzhou.aliyuncs.com
           username: ${{ secrets.HUB_NAME }}
           password: ${{ secrets.HUB_PASS }}
-
       - name: 准备干活
         if: env.issues == 'true' && env.iscustom == 'true'
         run: |
@@ -254,7 +253,7 @@ jobs:
                     docker push registry.cn-hangzhou.aliyuncs.com/dubux/$newImageName
                   fi
               done
-          fi
+            fi
       - name: 编译结束更新评论
         if: env.issues == 'true' && env.iscustom == 'true'
         uses: actions-cool/issues-helper@v3
